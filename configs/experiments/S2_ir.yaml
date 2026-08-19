@@ -1,0 +1,11 @@
+id: S2
+name: IR single-stream
+role: baseline
+modalities:
+- ir
+arch_spec:
+  arch: single
+  base: yolo11-obb.yaml
+  scale: s
+pretrained_weights: yolo11s-obb.pt
+normalize: none

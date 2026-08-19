@@ -1,0 +1,16 @@
+id: C1
+name: doi chung capacity - RGB vao ca hai luong
+role: capacity_control
+modalities:
+- rgb
+- rgb
+arch_spec:
+  arch: two_stream
+  base: yolo11-obb.yaml
+  scale: s
+  split:
+  - 3
+  - 3
+  fusion: concat1x1
+pretrained_weights: yolo11s-obb.pt
+normalize: none

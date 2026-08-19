@@ -1,0 +1,12 @@
+id: F1
+name: early fusion 4 kenh
+role: fusion
+modalities:
+- rgb
+- ir1
+arch_spec:
+  arch: single
+  base: yolo11-obb.yaml
+  scale: s
+pretrained_weights: yolo11s-obb.pt
+normalize: none

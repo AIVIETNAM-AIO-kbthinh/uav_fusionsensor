@@ -1,0 +1,13 @@
+# VEDAI 512 - luong IR (NIR). Mot bo GT dung chung cho ca hai modality.
+path: G:/uav_fusionsensor/data/vedai/ir
+train: fold01_train.txt
+val: fold01_test.txt
+names:
+  0: car
+  1: pickup
+  2: camping
+  3: truck
+  4: other
+  5: tractor
+  6: boat
+  7: van

@@ -1,0 +1,51 @@
+# Siêu tham số dùng chung cho MỌI cấu hình của ma trận thí nghiệm.
+# Bất kỳ khác biệt nào giữa các nhánh đều phải nằm ở configs/experiments/, không ở đây.
+# Chỉ được chứa khoá hợp lệ của Ultralytics.
+
+model: yolo11s-obb.yaml   # chỗ giữ chỗ; kiến trúc thật do src/models/build.py dựng
+task: obb
+mode: train
+
+epochs: 60
+patience: 100
+batch: 8                  # BẮT BUỘC bằng nhau ở mọi cấu hình — xem plan.md 6.4
+nbs: 32                   # gradient accumulate -> effective batch bằng nhau
+imgsz: 640
+cache: false
+workers: 8
+amp: true
+deterministic: true
+
+optimizer: SGD
+lr0: 0.01
+lrf: 0.01
+cos_lr: true
+momentum: 0.937
+weight_decay: 0.0005
+warmup_epochs: 3.0
+
+# --- augmentation ---------------------------------------------------------
+# HSV tắt cho MỌI cấu hình: RandomHSV/Albumentations của Ultralytics tự bỏ qua
+# ảnh khác 3 kênh, nên nếu bật thì nhánh 3 kênh được augment màu còn nhánh
+# 4/6 kênh thì không -> mất công bằng. Xem plan.md 6.4.
+hsv_h: 0.0
+hsv_s: 0.0
+hsv_v: 0.0
+degrees: 0.0
+translate: 0.1
+scale: 0.5
+shear: 0.0
+perspective: 0.0
+flipud: 0.0
+fliplr: 0.5
+mosaic: 1.0
+close_mosaic: 10
+mixup: 0.0
+cutmix: 0.0
+copy_paste: 0.0
+erasing: 0.0
+
+val: true
+plots: false
+save_period: -1
+verbose: true

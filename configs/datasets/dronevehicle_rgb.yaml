@@ -1,0 +1,11 @@
+# DroneVehicle - luong RGB. Nhan dung chung la annotation IR (GT thong nhat, plan muc 3.1).
+path: G:/uav_fusionsensor/data/dronevehicle/rgb
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: car
+  1: truck
+  2: bus
+  3: van
+  4: freight_car

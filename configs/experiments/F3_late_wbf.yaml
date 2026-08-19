@@ -1,0 +1,12 @@
+id: F3
+name: late fusion WBF tu S1+S2
+role: fusion_posthoc
+modalities:
+- rgb
+arch_spec:
+  arch: single
+  base: yolo11-obb.yaml
+  scale: s
+note: khong train; suy ra tu weight cua S1 va S2, xem src/fusion/wbf_obb.py
+pretrained_weights: yolo11s-obb.pt
+normalize: none

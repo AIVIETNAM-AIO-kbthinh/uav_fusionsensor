@@ -1,0 +1,12 @@
+# dữ liệu và kết quả nặng — tái tạo được bằng scripts/
+data/
+runs/
+*.pt
+*.npz
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# giữ lại các artefact nhẹ dùng để kiểm chứng
+!results/**

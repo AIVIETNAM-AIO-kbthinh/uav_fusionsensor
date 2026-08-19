@@ -1,0 +1,12 @@
+# Core training/inference stack
+ultralytics==8.4.61
+torch>=2.11.0
+torchvision>=0.26.0
+
+# Direct project imports
+numpy>=2.0.0
+opencv-python>=4.10.0
+PyYAML>=6.0.0
+
+# Tests
+pytest>=9.0.0

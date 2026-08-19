@@ -1,0 +1,11 @@
+id: S1
+name: RGB single-stream
+role: baseline
+modalities:
+- rgb
+arch_spec:
+  arch: single
+  base: yolo11-obb.yaml
+  scale: s
+pretrained_weights: yolo11s-obb.pt
+normalize: none

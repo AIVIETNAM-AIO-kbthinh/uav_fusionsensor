@@ -89,7 +89,7 @@ def test_pairing_is_same_scene():
     assert (matched > shuffled).mean() > 0.8
 
 
-def _build_dataset(modalities, augment, imgsz=640, seed=0):
+def _build_dataset(modalities, augment, imgsz=640, seed=0, hyp_override=None):
     from ultralytics.cfg import get_cfg
 
     from src.data.paired_dataset import PairedYOLODataset
@@ -100,11 +100,12 @@ def _build_dataset(modalities, augment, imgsz=640, seed=0):
         "names": {i: n for i, n in enumerate(["car", "truck", "bus", "van", "freight_car"])},
         "nc": 5, "channels": modality_channels(modalities), "modalities": list(modalities),
     }
-    hyp = get_cfg(overrides={"task": "obb", "imgsz": imgsz, "mosaic": 0.0, "mixup": 0.0,
-                             "cutmix": 0.0, "copy_paste": 0.0, "erasing": 0.0,
-                             "hsv_h": 0.0, "hsv_s": 0.0, "hsv_v": 0.0,
-                             "degrees": 0.0, "translate": 0.0, "scale": 0.0,
-                             "fliplr": 1.0 if augment else 0.0, "flipud": 0.0})
+    hyp = hyp_override or get_cfg(overrides={
+        "task": "obb", "imgsz": imgsz, "mosaic": 0.0, "mixup": 0.0,
+        "cutmix": 0.0, "copy_paste": 0.0, "erasing": 0.0,
+        "hsv_h": 0.0, "hsv_s": 0.0, "hsv_v": 0.0, "augmentations": [],
+        "degrees": 0.0, "translate": 0.0, "scale": 0.0,
+        "fliplr": 1.0 if augment else 0.0, "flipud": 0.0})
     return PairedYOLODataset(img_path=str(ROOT / "rgb" / "images" / "val"), imgsz=imgsz,
                              batch_size=2, augment=augment, hyp=hyp, rect=False, cache=None,
                              single_cls=False, stride=32, pad=0.0, prefix="test: ",
@@ -196,3 +197,31 @@ def test_ir_shift_only_affects_ir():
     shifted = build((10, 0))[0]["img"].numpy()
     assert np.array_equal(base[:3], shifted[:3]), "dich IR da lam doi kenh RGB"
     assert not np.array_equal(base[3:], shifted[3:]), "dich IR khong co tac dung"
+
+
+def test_colour_augment_disabled_for_all_configs():
+    """HSV và Albumentations phải TẮT cho mọi cấu hình.
+
+    Cả hai đều tự bỏ qua ảnh khác 3 kênh mà không báo lỗi. Nếu để bật thì S1/S2
+    (3 kênh) được augment màu còn F1 (4 kênh) và C1/C2/F2 (6 kênh) thì không —
+    chênh lệch đó sẽ bị quy nhầm cho fusion.
+
+    Albumentations đặc biệt nguy hiểm vì Ultralytics bật nó NGẦM ĐỊNH chỉ cần
+    package có mặt trong môi trường, không phụ thuộc hyp nào.
+    """
+    from ultralytics.cfg import get_cfg
+    from ultralytics.utils import YAML
+
+    base = YAML.load("configs/base.yaml")
+    assert base.get("hsv_h") == 0.0 and base.get("hsv_s") == 0.0 and base.get("hsv_v") == 0.0
+    assert base.get("augmentations") == [], "base.yaml phai dat augmentations: [] de tat Albumentations"
+
+    ov = {k: v for k, v in base.items() if k not in ("model", "mode")}
+    ov.update(data="configs/datasets/dronevehicle_ir.yaml", task="obb", imgsz=320)
+    hyp = get_cfg(overrides=ov)
+
+    for modalities in (["rgb"], ["rgb", "ir"]):
+        ds = _build_dataset(modalities, augment=True, hyp_override=hyp)
+        alb = [t for t in ds.transforms.transforms if type(t).__name__ == "Albumentations"]
+        n = len(alb[0].transform.transforms) if alb and alb[0].transform is not None else 0
+        assert n == 0, f"{modalities}: Albumentations van con {n} phep bien doi"

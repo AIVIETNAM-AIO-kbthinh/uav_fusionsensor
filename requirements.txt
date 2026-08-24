@@ -1,12 +1,45 @@
-# Core training/inference stack
+# Thư viện cho dự án fusion RGB-IR trên UAV.
+#
+# ⚠️ torch phải cài RIÊNG trước, từ index của PyTorch, để lấy đúng bản CUDA.
+#    `pip install -r requirements.txt` sẽ kéo bản CPU nếu chưa cài torch.
+#
+#    # CUDA 12.8 (đúng môi trường đang dùng: RTX 3060 Ti, driver 560.94)
+#    pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+#
+#    # rồi mới
+#    pip install -r requirements.txt
+#
+# Kiểm tra sau khi cài:
+#    python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+#    python -m pytest -q
+
+# --- lõi -------------------------------------------------------------------
+# Ultralytics tự kéo theo numpy, opencv-python, pillow, pyyaml, scipy,
+# matplotlib, polars, psutil, requests, ultralytics-thop.
+# Ghim chính xác vì mã nguồn dựa vào chi tiết nội bộ của phiên bản này:
+#   - nhánh `c2 = args[0]` cho `Index` trong `parse_model`
+#   - `build_yolo_dataset` là điểm chèn dataset ghép cặp
+#   - `RandomPerspective.apply_image` là nơi vá lỗi lấp viền >4 kênh
+# Nâng phiên bản thì phải chạy lại `pytest` trước khi tin kết quả.
 ultralytics==8.4.61
-torch>=2.11.0
-torchvision>=0.26.0
 
-# Direct project imports
-numpy>=2.0.0
-opencv-python>=4.10.0
-PyYAML>=6.0.0
+torch==2.11.0
+torchvision==0.26.0
 
-# Tests
-pytest>=9.0.0
+numpy==2.4.4
+opencv-python==4.13.0.92
+PyYAML==6.0.3
+
+# --- test ------------------------------------------------------------------
+pytest==9.0.3
+
+# --- CỐ Ý KHÔNG CÀI --------------------------------------------------------
+# albumentations
+#   Ultralytics bật Albumentations NGẦM ĐỊNH chỉ cần package có mặt trong môi
+#   trường. Nó tự bỏ qua ảnh khác 3 kênh, nên S1/S2 sẽ được augment màu còn
+#   F1/F2/C1/C2 thì không -> mất công bằng giữa các nhánh thí nghiệm.
+#   `configs/base.yaml` đã đặt `augmentations: []` để tắt sạch kể cả khi package
+#   được cài, nhưng không cài vẫn là cách chắc chắn hơn.
+#
+# Các extra khác của Ultralytics (onnx, openvino, tensorflow, coreml, wandb,
+# mlflow, streamlit...) không cần cho dự án này.

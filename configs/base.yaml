@@ -25,12 +25,20 @@ weight_decay: 0.0005
 warmup_epochs: 3.0
 
 # --- augmentation ---------------------------------------------------------
-# HSV tắt cho MỌI cấu hình: RandomHSV/Albumentations của Ultralytics tự bỏ qua
-# ảnh khác 3 kênh, nên nếu bật thì nhánh 3 kênh được augment màu còn nhánh
-# 4/6 kênh thì không -> mất công bằng. Xem plan.md 6.4.
+# HSV và Albumentations tắt cho MỌI cấu hình.
+#
+# Lý do: cả `RandomHSV` lẫn `Albumentations` của Ultralytics đều TỰ BỎ QUA ảnh
+# khác 3 kênh (`if img.shape[-1] != 3: return`). Chúng không báo lỗi, nhưng nghĩa
+# là S1/S2 (3 kênh) được augment màu còn F1 (4 kênh) và C1/C2/F2 (6 kênh) thì
+# không -> chênh lệch bị quy nhầm cho fusion. Xem plan.md 6.4.
+#
+# Albumentations được Ultralytics bật NGẦM ĐỊNH chỉ cần package có mặt trong môi
+# trường (Blur, MedianBlur, ToGray, CLAHE mỗi cái p=0.01), không phụ thuộc hyp
+# nào. Truyền danh sách rỗng là cách tắt sạch và tường minh.
 hsv_h: 0.0
 hsv_s: 0.0
 hsv_v: 0.0
+augmentations: []
 degrees: 0.0
 translate: 0.1
 scale: 0.5

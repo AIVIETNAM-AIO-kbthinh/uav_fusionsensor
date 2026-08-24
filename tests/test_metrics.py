@@ -192,3 +192,59 @@ def test_xywhr_poly_roundtrip():
     b2 = poly_to_xywhr(p)
     assert abs(b2[0, 0] - 50) < 1e-3 and abs(b2[0, 1] - 40) < 1e-3
     assert abs(sorted(b2[0, 2:4])[1] - 20) < 1e-3
+
+
+# ------------------------------------------------- harness: dump & toạ độ
+
+def test_scale_gt_matches_scale_preds():
+    """GT và prediction phải về CÙNG một hệ toạ độ sau khi scale.
+
+    `_prepare_batch` của Ultralytics chỉ nhân GT với imgsz (-> toạ độ letterbox),
+    còn `scale_preds` đưa dự đoán về toạ độ ảnh gốc. Nếu dump GT thô thì hai bên
+    lệch nhau đúng bằng padding letterbox — với ảnh 640x512 là 64 px theo y —
+    và mAP sập từ ~0,62 xuống ~0,004.
+    """
+    import torch
+
+    from src.eval.harness import DumpingOBBValidator as V
+
+    box = torch.tensor([[320.0, 300.0, 40.0, 20.0, 0.3]])   # toạ độ letterbox
+    pbatch = {"bboxes": box.clone(), "imgsz": (640, 640),
+              "ori_shape": (512, 640), "ratio_pad": ((1.0, 1.0), (0.0, 64.0))}
+
+    gt = V.scale_gt(pbatch)["bboxes"]
+    pred = V.scale_preds(None, {"bboxes": box.clone()}, pbatch)["bboxes"]
+
+    assert torch.allclose(gt, pred), f"gt={gt} pred={pred}"
+    assert gt[0, 1].item() == pytest.approx(300.0 - 64.0)    # padding đã bị trừ
+    assert gt[0, 4].item() == pytest.approx(0.3)             # góc giữ nguyên
+
+
+def test_load_dump_roundtrip(tmp_path):
+    """save_dump -> load_dump phải trả đúng dữ liệu từng ảnh.
+
+    load_dump phải nạp mỗi mảng `__data` MỘT lần: `NpzFile` không cache nên truy
+    cập trong vòng lặp sẽ giải nén lại toàn mảng mỗi ảnh (8980 ảnh x 5 khoá ->
+    MemoryError).
+    """
+    from src.eval.harness import load_dump, save_dump
+
+    rng = np.random.default_rng(0)
+    ref = {}
+    for i in range(7):
+        n, g = int(rng.integers(0, 5)), int(rng.integers(0, 4))
+        ref[f"img{i}"] = {
+            "pred_poly": rng.random((n, 8), dtype=np.float32) * 640,
+            "conf": rng.random(n, dtype=np.float32),
+            "pred_cls": rng.integers(0, 5, n).astype(np.int32),
+            "gt_poly": rng.random((g, 8), dtype=np.float32) * 640,
+            "gt_cls": rng.integers(0, 5, g).astype(np.int32),
+        }
+    p = tmp_path / "d.npz"
+    save_dump(ref, p)
+    got = load_dump(p)
+
+    assert set(got) == set(ref)
+    for k, r in ref.items():
+        for key, v in r.items():
+            assert np.array_equal(got[k][key], v), f"{k}/{key}"

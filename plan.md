@@ -54,6 +54,7 @@ Toàn bộ 8 cấu hình của ma trận chạy được end-to-end. `pytest`: *
 | Late fusion WBF cho box xoay | ✅ `src/fusion/wbf_obb.py` |
 | Ablation RQ4 (dịch IR khi test) | ✅ `scripts/run_rq4_ablation.py` |
 | Điều phối ma trận + sinh bảng | ✅ `scripts/{run_matrix,make_tables}.py` |
+| **Ngắt/chạy lại ở mức epoch** | ✅ khôi phục optimizer + EMA + lịch LR; test bằng ngắt tín hiệu thật |
 
 **Cách tiếp cận kỹ thuật đã chốt (thay cho phương án MMRotate ở R1):** xếp hai
 modality thành một mảng HWC nhiều kênh ngay tại `load_image`, model tách lại bằng

@@ -14,6 +14,8 @@ def main():
     ap.add_argument("--project", default="runs")
     ap.add_argument("--name", default=None)
     ap.add_argument("--set", nargs="*", default=[], help="ghi de arg Ultralytics, vd epochs=1 batch=4")
+    ap.add_argument("--no-resume", action="store_true",
+                    help="train lai tu dau thay vi tiep tuc tu weights/last.pt")
     a = ap.parse_args()
 
     overrides = {}
@@ -27,7 +29,7 @@ def main():
 
     exp = YAML.load(a.exp)
     r = run_experiment(exp, a.dataset, seed=a.seed, project=a.project, name=a.name,
-                       overrides=overrides)
+                       overrides=overrides, resume=not a.no_resume)
     print(json.dumps(r, indent=1, ensure_ascii=False))
 
 

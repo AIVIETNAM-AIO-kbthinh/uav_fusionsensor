@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from ultralytics.models.yolo.obb import OBBValidator
+from ultralytics.utils import ops
 from ultralytics.utils import YAML
 from ultralytics.utils.ops import xywhr2xyxyxyxy
 
@@ -36,6 +37,16 @@ class DumpingOBBValidator(OBBValidator):
         super().__init__(*args, **kwargs)
         self.dump: dict[str, dict] = {}
 
+    @staticmethod
+    def scale_gt(pbatch: dict) -> dict:
+        """Đưa GT từ toạ độ letterbox về toạ độ ảnh gốc — đối xứng với `scale_preds`."""
+        gb = pbatch["bboxes"]
+        if not len(gb):
+            return pbatch
+        return {**pbatch, "bboxes": ops.scale_boxes(
+            pbatch["imgsz"], gb.clone(), pbatch["ori_shape"],
+            ratio_pad=pbatch["ratio_pad"], xywh=True)}
+
     def update_metrics(self, preds, batch):
         super().update_metrics(preds, batch)
         for si, pred in enumerate(preds):
@@ -43,7 +54,11 @@ class DumpingOBBValidator(OBBValidator):
             predn = self.scale_preds(self._prepare_pred(pred), pbatch)
             stem = Path(pbatch["im_file"]).stem
             pb = predn["bboxes"].detach().cpu()
-            gb = pbatch["bboxes"].detach().cpu()
+            # `_prepare_batch` chỉ đưa GT về toạ độ LETTERBOX (nhân imgsz), trong khi
+            # `scale_preds` đã đưa dự đoán về toạ độ ẢNH GỐC. Phải scale GT y hệt,
+            # nếu không hai bên lệch nhau đúng bằng padding của letterbox (64 px với
+            # ảnh 640x512) và IoU sập về ~0.
+            gb = self.scale_gt(pbatch)["bboxes"].detach().cpu()
             self.dump[stem] = {
                 "pred_poly": (xywhr2xyxyxyxy(pb).reshape(-1, 8).numpy().astype(np.float32)
                               if len(pb) else np.zeros((0, 8), np.float32)),
@@ -117,18 +132,20 @@ def save_dump(dump: dict, path: str | Path) -> None:
 
 
 def load_dump(path: str | Path) -> dict:
-    z = np.load(str(path), allow_pickle=True)
-    ids = list(z["ids"])
-    out = {}
-    offs = {k: np.concatenate([[0], np.cumsum(z[f"{k}__len"])])
-            for k in ("pred_poly", "conf", "pred_cls", "gt_poly", "gt_cls")}
-    for n, i in enumerate(ids):
-        rec = {}
-        for k in offs:
-            a, b = offs[k][n], offs[k][n + 1]
-            rec[k] = z[f"{k}__data"][a:b]
-        out[str(i)] = rec
-    return out
+    """Đọc lại dump đã lưu.
+
+    `NpzFile` KHÔNG cache: mỗi lần `z[key]` là một lần giải nén lại toàn bộ mảng.
+    Vì vậy phải nạp mỗi mảng đúng một lần rồi mới cắt lát trong vòng lặp — nếu
+    truy cập `z[...]` bên trong vòng lặp thì với 8980 ảnh sẽ là 44.900 lần giải
+    nén mảng 40 MiB, đủ để phân mảnh vùng nhớ và ném MemoryError.
+    """
+    keys = ("pred_poly", "conf", "pred_cls", "gt_poly", "gt_cls")
+    with np.load(str(path), allow_pickle=True) as z:
+        ids = [str(i) for i in z["ids"]]
+        data = {k: z[f"{k}__data"] for k in keys}
+        offs = {k: np.concatenate([[0], np.cumsum(z[f"{k}__len"])]) for k in keys}
+    return {i: {k: data[k][offs[k][n]:offs[k][n + 1]] for k in keys}
+            for n, i in enumerate(ids)}
 
 
 def match_all(dump: dict, iou_thrs=M.IOU_THRS) -> dict:

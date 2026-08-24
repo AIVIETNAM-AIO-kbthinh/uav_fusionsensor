@@ -9,8 +9,14 @@
     # chạy thử nhanh
     python scripts/run_matrix.py --dataset vedai --folds 01 --only S1 F2a --set epochs=2
 
-Thiết kế: nối tiếp, một GPU, có thể dừng và chạy lại. Run nào đã có `result.json`
-thì bỏ qua, nên khi bị ngắt giữa chừng chỉ cần chạy lại đúng lệnh cũ.
+Thiết kế: nối tiếp, một GPU, **dừng và chạy lại được ở hai mức**.
+
+  * mức run   — run đã có `result.json` thì bỏ qua hoàn toàn
+  * mức epoch — run dở dang có `weights/last.pt` thì tiếp tục đúng epoch bị ngắt,
+                khôi phục cả optimizer, EMA và lịch learning rate
+
+Nên khi bị ngắt giữa chừng chỉ cần chạy lại **đúng lệnh cũ**. Dùng `--no-resume`
+nếu muốn train lại từ đầu.
 """
 import argparse
 import json
@@ -48,6 +54,8 @@ def main():
     ap.add_argument("--skip", nargs="*", default=["F2b"], help="mac dinh hoan F2b (plan 0.1)")
     ap.add_argument("--project", default=None)
     ap.add_argument("--set", nargs="*", default=[], help="ghi de arg Ultralytics")
+    ap.add_argument("--no-resume", action="store_true",
+                    help="train lai tu dau moi run do dang thay vi tiep tuc")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
@@ -89,12 +97,17 @@ def main():
             print(f"[{k}/{len(jobs)}] {name}: da co ket qua, bo qua")
             done.append(name)
             continue
+        from src.train import resumable_checkpoint
+        last = None if a.no_resume else resumable_checkpoint(run_dir)
         cmd = [sys.executable, str(ROOT / "scripts/run_experiment.py"),
                "--exp", str(cfg), "--dataset", str(dy), "--seed", str(seed),
                "--project", str(project), "--name", name]
+        if a.no_resume:
+            cmd.append("--no-resume")
         if a.set:
             cmd += ["--set", *a.set]
-        print(f"\n[{k}/{len(jobs)}] {name}\n  $ {' '.join(cmd)}", flush=True)
+        tag = f"  (tiep tuc tu epoch da luu trong {last.name})" if last else ""
+        print(f"\n[{k}/{len(jobs)}] {name}{tag}\n  $ {' '.join(cmd)}", flush=True)
         t0 = time.time()
         r = subprocess.run(cmd, cwd=ROOT)
         dt = (time.time() - t0) / 3600

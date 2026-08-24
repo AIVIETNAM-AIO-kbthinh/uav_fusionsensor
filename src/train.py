@@ -46,13 +46,39 @@ class FusionOBBTrainer(OBBTrainer):
     pretrained_stats: dict | None = None
 
     def get_model(self, cfg=None, weights=None, verbose: bool = True):
+        """Dựng kiến trúc từ `arch_spec`, rồi nạp trọng số đúng nguồn.
+
+        ⚠️ `weights` KHÔNG được bỏ qua. `BaseTrainer.setup_model` truyền vào đây
+        model đã nạp từ checkpoint khi resume::
+
+            if str(self.model).endswith(".pt"):
+                weights, ckpt = load_checkpoint(self.model)
+            self.model = self.get_model(cfg=cfg, weights=weights, ...)
+
+        Nếu bỏ qua `weights`, resume sẽ dựng model mới rồi nạp đè pretrained
+        ImageNet — **mất toàn bộ trọng số đã train mà không báo lỗi nào**, trong
+        khi optimizer/epoch vẫn được khôi phục nên nhìn log tưởng là bình thường.
+        """
         model, built_cfg = build_arch(
             self.arch_spec or {"arch": "single"},
             nc=self.data["nc"],
             ch=self.data["channels"],
             verbose=verbose,
         )
-        if self.pretrained_weights:
+        if weights is not None:
+            sd = weights.float().state_dict() if hasattr(weights, "state_dict") else weights
+            missing, unexpected = model.load_state_dict(sd, strict=False)
+            if missing:
+                raise RuntimeError(
+                    f"resume: thieu {len(missing)} tensor khi nap checkpoint, vi du {missing[:3]}. "
+                    f"Kien truc trong config khong khop checkpoint."
+                )
+            self.pretrained_stats = {"source": "checkpoint", "loaded": len(sd),
+                                     "model_tensors": len(model.state_dict()),
+                                     "unexpected": len(unexpected)}
+            if verbose:
+                print(f"[resume] nap {len(sd)} tensor tu checkpoint (khong nap lai pretrained)")
+        elif self.pretrained_weights:
             self.pretrained_stats = load_pretrained(model, self.pretrained_weights, built_cfg,
                                                     verbose=verbose)
         return model
@@ -87,8 +113,28 @@ def make_data_yaml(dataset_yaml: str | Path, modalities: list[str], out_path: st
     return out_path
 
 
+def resumable_checkpoint(run_dir: str | Path) -> Path | None:
+    """Trả về `last.pt` nếu run bị ngắt giữa chừng và còn tiếp tục được.
+
+    Điều kiện: file tồn tại VÀ `epoch >= 0`. Khi train xong, Ultralytics gọi
+    `strip_optimizer` — nó xoá optimizer state và đặt `epoch = -1`. Checkpoint đó
+    không resume được (và cũng không cần). Kiểm tra trước để báo lỗi rõ ràng thay
+    vì để Ultralytics ném assert khó hiểu ở giữa quá trình.
+    """
+    last = Path(run_dir) / "weights" / "last.pt"
+    if not last.exists():
+        return None
+    try:
+        import torch as _torch
+        ckpt = _torch.load(last, map_location="cpu", weights_only=False)
+    except Exception:
+        return None
+    return last if ckpt.get("epoch", -1) >= 0 else None
+
+
 def run_experiment(exp: dict, dataset_yaml: str | Path, seed: int, project: str = "runs",
-                   name: str | None = None, overrides: dict | None = None) -> dict:
+                   name: str | None = None, overrides: dict | None = None,
+                   resume: bool = True) -> dict:
     """Chạy một ô của ma trận thí nghiệm.
 
     Args:
@@ -118,7 +164,18 @@ def run_experiment(exp: dict, dataset_yaml: str | Path, seed: int, project: str 
     args.update(data=str(data_yaml), seed=seed, project=project, name=name, exist_ok=True,
                 save_dir=str(run_dir))
 
-    cfg_record = {"experiment": exp, "dataset_yaml": str(dataset_yaml), "seed": seed, "args": args}
+    resumed_from = None
+    if resume:
+        last = resumable_checkpoint(run_dir)
+        if last is not None:
+            # `check_resume` của Ultralytics nạp lại toàn bộ args từ checkpoint,
+            # nên epoch/optimizer/EMA/lr-schedule đều tiếp tục đúng chỗ bị ngắt.
+            args["resume"] = str(last)
+            resumed_from = str(last)
+            print(f"[resume] tiep tuc tu {last}")
+
+    cfg_record = {"experiment": exp, "dataset_yaml": str(dataset_yaml), "seed": seed, "args": args,
+                  "resumed_from": resumed_from}
     dump_provenance(run_dir / "provenance.json", cfg_record)
 
     trainer = FusionOBBTrainer(overrides=args)

@@ -88,9 +88,31 @@ python scripts/run_rq4_ablation.py --runs runs/dronevehicle/F1_seed0 \
 
 python scripts/make_tables.py --project runs/dronevehicle --split test \
     --illum data/dronevehicle/meta/test_illum.csv
+
+# --- biểu đồ ------------------------------------------------------------
+python scripts/make_figures.py            # 9 hình -> results/figures/ + bảng số liệu
+python scripts/make_figures.py --only 1 6 --reuse-effects   # vẽ lại, bỏ qua bootstrap
+python scripts/make_report.py             # gộp thành results/report.html tự chứa
 ```
 
-`run_matrix.py` bỏ qua run đã có `result.json`, nên bị ngắt giữa chừng chỉ cần chạy lại đúng lệnh cũ.
+### Ngắt và chạy lại
+
+Có checkpoint ở **hai mức**, nên ngắt lúc nào cũng chỉ cần chạy lại **đúng lệnh cũ**:
+
+| Mức | Cơ chế | Mất bao nhiêu |
+|---|---|---|
+| Run | run có `result.json` thì bỏ qua hoàn toàn | 0 |
+| Epoch | run dở dang có `weights/last.pt` thì tiếp tục đúng epoch bị ngắt, khôi phục cả optimizer, EMA, lịch learning rate | tối đa 1 epoch |
+
+```bash
+python scripts/run_matrix.py --dataset dronevehicle   # Ctrl-C bất cứ lúc nào
+python scripts/run_matrix.py --dataset dronevehicle   # chạy lại: tiếp tục chỗ cũ
+python scripts/run_matrix.py --dataset dronevehicle --no-resume   # ép train lại từ đầu
+```
+
+Ultralytics ghi `last.pt` sau **mỗi** epoch (không phụ thuộc `save_period`), nên tối đa chỉ mất một epoch dở.
+
+Kiểm chứng bằng test train thật rồi ngắt bằng tín hiệu: `pytest tests/test_resume.py -m slow`.
 
 ---
 
@@ -116,8 +138,11 @@ src/
 │   ├── bootstrap.py           # CI ghép cặp theo ảnh, công thức có trọng số
 │   └── harness.py             # suy luận + kết xuất + đánh giá phân tầng
 └── utils/seed.py              # seed + provenance
-tests/                         # 44 test
+tests/                         # 45 test (2 danh dau `slow`: resume)
 scripts/                       # chuẩn bị dữ liệu, chạy, đánh giá, tổng hợp
+├── make_tables.py             # bảng kết quả + bootstrap CI
+├── make_figures.py            # 9 biểu đồ -> results/figures/ (xem README ở đó)
+└── make_report.py             # gộp biểu đồ thành một trang HTML tự chứa
 ```
 
 Mỗi run ghi `provenance.json` (config + hash + phiên bản torch/ultralytics/GPU), `data.yaml`, `result.json`, `preds_*.npz`, `metrics_*.json`. Không có số liệu nào phải đọc từ stdout.
@@ -168,7 +193,9 @@ Với `trapz`, một dự đoán hoàn hảo duy nhất cho AP = 0,995 chứ kh�
 
 **`batch=8` cho mọi cấu hình.** Two-stream bs16@640 cần ~7,7GB, không vừa RTX 3060 Ti 8GB. Nếu để single-stream chạy bs16 còn two-stream bs8 thì batch khác nhau đổi cả effective LR lẫn thống kê BatchNorm — và chênh lệch đó bị quy nhầm cho fusion. Dùng `nbs=32` để gradient accumulate về cùng nominal batch.
 
-**Tắt HSV cho mọi cấu hình.** `RandomHSV` và `Albumentations` của Ultralytics tự bỏ qua ảnh ≠3 kênh. Chúng không lỗi, nhưng nghĩa là nhánh 3 kênh được augment màu còn nhánh 4/6 kênh thì không → mất công bằng.
+**Tắt HSV *và* Albumentations cho mọi cấu hình.** Cả hai tự bỏ qua ảnh ≠3 kênh mà không báo lỗi, nghĩa là nhánh 3 kênh được augment màu còn nhánh 4/6 kênh thì không → mất công bằng.
+
+Albumentations nguy hiểm hơn: Ultralytics bật nó **ngầm định chỉ cần package có mặt trong môi trường** (Blur/MedianBlur/ToGray/CLAHE, mỗi cái p=0,01), không phụ thuộc hyp nào. `configs/base.yaml` đặt `augmentations: []` để tắt sạch — đã kiểm chứng 7 phép biến đổi → 0, và `tests/test_data.py::test_colour_augment_disabled_for_all_configs` khoá lại.
 
 **Không chuẩn hoá mean/std (lệch có chủ đích so với plan 6.4).** Mối lo của plan là *dùng chung* thống kê giữa hai modality; với phép chia 255 thì không có thống kê nào được chia sẻ, và BatchNorm ở stem tự học riêng cho từng kênh. Thêm nữa, pretrained YOLO kỳ vọng đầu vào trong [0,1]. Tuỳ chọn `normalize: per_modality` vẫn có sẵn để kiểm chứng lại bằng thực nghiệm.
 
@@ -176,7 +203,7 @@ Với `trapz`, một dự đoán hoàn hảo duy nhất cho AP = 0,995 chứ kh�
 
 ## 7. Trạng thái
 
-`pytest`: **44/44 xanh**. Pipeline đã chạy thông end-to-end trên VEDAI qua `scripts/smoke_pipeline.py`: train ma trận → đánh giá phân tầng → late fusion WBF → ablation RQ4 → bảng kết quả có khoảng tin cậy.
+`pytest`: **45/45 xanh** (+2 test `slow` cho resume). Pipeline đã chạy thông end-to-end trên VEDAI qua `scripts/smoke_pipeline.py`: train ma trận → đánh giá phân tầng → late fusion WBF → ablation RQ4 → bảng kết quả có khoảng tin cậy.
 
 Ví dụ đầu ra (3 epoch, **chỉ để kiểm chứng lắp ghép — không phải kết quả nghiên cứu**):
 
@@ -196,5 +223,15 @@ Còn lại là chạy ma trận thật: `run_matrix.py --dataset vedai` rồi `-
 ## 8. Môi trường
 
 RTX 3060 Ti 8GB · i5-13600K · 32GB RAM · Python 3.14 · torch 2.11+cu128 · ultralytics 8.4.61
+
+Cài đặt — **torch phải cài riêng trước** để lấy đúng bản CUDA:
+
+```bash
+pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+pip install -r requirements.txt
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
+`requirements.txt` **cố ý không cài `albumentations`** — xem mục 6.
 
 ⚠️ MMRotate **không dùng được** trên môi trường này (mmcv pin torch <2.1, không có wheel cho Python 3.14). Phương án dự phòng của plan cho R1 là đường 6 kênh ở đây, không phải MMRotate.

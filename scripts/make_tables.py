@@ -3,7 +3,7 @@
 Đây là nơi các câu hỏi nghiên cứu được trả lời bằng số:
 
     RQ1 (ngây thơ)   max(F1,F2a,F2b,F3) vs max(S1,S2)
-    RQ1 (trung thực) F2a vs C2      <- ĐÃ KIỂM SOÁT CAPACITY, con số để claim
+    RQ1 (trung thực) F2a vs C2, F2b vs C2b   <- ĐÃ KIỂM SOÁT CAPACITY, con số để claim
     chẩn đoán        C2  vs S2      <- lợi ích thuần từ tăng capacity
     RQ2              F1 vs F2a vs F2b vs F3
     RQ3              các so sánh trên, tách theo tầng chiếu sáng
@@ -34,8 +34,11 @@ COMPARISONS = [
     ("C1", "S1", "chan doan — loi ich thuan tu tang capacity (RGB)"),
     ("F2a", "S2", "RQ1 ngay tho — fusion vs modality don le"),
     ("F2a", "F1", "RQ2 — mid vs early"),
+    ("F2b", "F1", "RQ2 — two-stream + cong vs early fusion 4 kenh"),
     ("F2a", "F3", "RQ2 — mid vs late"),
+    ("F2b", "C2b", "RQ1 trung thuc (attn) — F2b vs doi chung capacity cua chinh no"),
     ("F2b", "F2a", "RQ2 — attention vs concat"),
+    ("C2b", "C2", "chan doan — chi phi/loi ich thuan cua cong attn (khong co tin hieu bo sung)"),
 ]
 ILLUM_BINS = ["lowlight", "midlight", "bright"]
 

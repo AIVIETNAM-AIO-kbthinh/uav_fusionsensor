@@ -85,6 +85,11 @@ COMPARISONS = [
     ("F2a", "F1", "RQ2 — fusion giữa vs fusion sớm"),
     ("C2", "S2", "chẩn đoán — lợi ích thuần từ capacity (IR)"),
     ("C1", "S1", "chẩn đoán — lợi ích thuần từ capacity (RGB)"),
+    ("F2a", "F3", "RQ2 — fusion giữa vs fusion muộn"),
+    ("F2b", "F1", "RQ2 — two-stream + cổng vs early fusion 4 kênh"),
+    ("F2b", "C2b", "RQ1 trung thực (attn) — F2b vs đối chứng capacity của chính nó"),
+    ("F2b", "F2a", "RQ2 — attention gate vs concat+1×1"),
+    ("C2b", "C2", "chẩn đoán — cổng attn khi KHÔNG có tín hiệu bổ sung"),
 ]
 
 FOOT_HARNESS = ("Chỉ số của harness đề tài: IoU đa giác chính xác, AP nội suy 101 điểm "
@@ -524,11 +529,16 @@ EFFECTS = OUT / "_effect_sizes.json"
 
 def _effect_rows(n_boot, reuse):
     """Bootstrap tốn ~15 phút; `reuse` đọc lại kết quả đã lưu nếu khớp cấu hình."""
+    # Cap nao thuc su chay duoc: ca hai phia phai co run da xong. Cau hinh chua
+    # train (vd F2b tren DroneVehicle) bi bo qua thay vi lam vo ca ham. CID la
+    # danh sach de VE HINH (chi 6 mau trong SLOTS) nen khong dung o day.
+    avail = {(d["name"], a, b) for d in DATASETS for a, b, _ in COMPARISONS
+             if run_dirs(d, a) and run_dirs(d, b)}
+
     if reuse and EFFECTS.exists():
         rows = json.loads(EFFECTS.read_text(encoding="utf-8"))
-        want = {(d["name"], a, b) for d in DATASETS for a, b, _ in COMPARISONS}
-        if {(r["ds"], r["a"], r["b"]) for r in rows} == want and \
-                all(r["n_boot"] == n_boot for r in rows):
+        same_pairs = {(r["ds"], r["a"], r["b"]) for r in rows} == avail
+        if same_pairs and all(r["n_boot"] == n_boot for r in rows):
             print("  dùng lại _effect_sizes.json đã có")
             return rows
         print("  _effect_sizes.json không khớp cấu hình hiện tại — tính lại")
@@ -537,11 +547,16 @@ def _effect_rows(n_boot, reuse):
     rows = []
     for ds in DATASETS:
         nc = len(class_names(ds))
+        # chi nap cau hinh xuat hien trong mot cap chay duoc cua dataset nay
+        need = sorted({c for (dsn, x, y) in avail if dsn == ds["name"] for c in (x, y)})
         pi = {}
-        for cid in CID:
+        for cid in need:
             print(f"  bootstrap: nạp {ds['key']}/{cid} ...", flush=True)
             pi[cid] = _pooled_per_image(ds, cid)
         for A, B, lab in COMPARISONS:
+            if (ds["name"], A, B) not in avail:
+                print(f"    {ds['name']:13s} {A} vs {B}: bo qua (chua co run)")
+                continue
             ids = sorted(set(pi[A]) & set(pi[B]))
             r = bootstrap_delta(pi[A], pi[B], ids, nc=nc, n_boot=n_boot, seed=0)
             # `bootstrap_delta` cũng trả về khoá "a"/"b" (giá trị mAP của từng

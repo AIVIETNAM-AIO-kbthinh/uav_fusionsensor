@@ -30,6 +30,10 @@ EXPERIMENTS = [
          role="capacity_control", modalities=["rgb", "rgb"], arch_spec=TWO_CONCAT),
     dict(id="C2", name="doi chung capacity - IR vao ca hai luong",
          role="capacity_control", modalities=["ir", "ir"], arch_spec=TWO_CONCAT),
+    dict(id="C1b", name="doi chung capacity attn - RGB vao ca hai luong",
+         role="capacity_control", modalities=["rgb", "rgb"], arch_spec=TWO_ATTN),
+    dict(id="C2b", name="doi chung capacity attn - IR vao ca hai luong",
+         role="capacity_control", modalities=["ir", "ir"], arch_spec=TWO_ATTN),
     dict(id="F1", name="early fusion 4 kenh", role="fusion",
          modalities=["rgb", "ir1"], arch_spec=EARLY),
     dict(id="F2a", name="mid fusion concat+1x1", role="fusion",
@@ -42,6 +46,7 @@ EXPERIMENTS = [
 ]
 
 FILENAMES = {"S1": "S1_rgb", "S2": "S2_ir", "C1": "C1_dup_rgb", "C2": "C2_dup_ir",
+             "C1b": "C1b_dup_rgb_attn", "C2b": "C2b_dup_ir_attn",
              "F1": "F1_early", "F2a": "F2a_mid_concat", "F2b": "F2b_mid_attn",
              "F3": "F3_late_wbf"}
 
@@ -56,10 +61,15 @@ def main():
         YAML.save(str(out / f"{FILENAMES[e['id']]}.yaml"), e)
         print(f"  {FILENAMES[e['id']]}.yaml  modalities={e['modalities']} arch={e['arch_spec']['arch']}")
 
-    # bất biến quan trọng nhất của đề tài
-    same = [e["arch_spec"] for e in EXPERIMENTS if e["id"] in ("C1", "C2", "F2a")]
-    assert all(s == same[0] for s in same), "C1/C2/F2a PHAI dung chung arch_spec"
-    print("\n[OK] C1, C2, F2a dung chung arch_spec -> doi chung capacity hop le")
+    # Moi toan tu hop nhat phai co doi chung capacity dung CHUNG arch_spec voi
+    # cau hinh fusion tuong ung - neu khong, F2b vs C2 lech 198.784 tham so.
+    by_id = {e["id"]: e["arch_spec"] for e in EXPERIMENTS}
+    print()
+    for group in (("C1", "C2", "F2a"), ("C1b", "C2b", "F2b")):
+        specs = [by_id[i] for i in group]
+        assert all(x == specs[0] for x in specs), f"{'/'.join(group)} PHAI dung chung arch_spec"
+        print(f"[OK] {', '.join(group)} dung chung arch_spec -> doi chung capacity hop le")
+    assert by_id["F2a"] != by_id["F2b"], "F2a va F2b phai khac toan tu hop nhat"
 
 
 if __name__ == "__main__":

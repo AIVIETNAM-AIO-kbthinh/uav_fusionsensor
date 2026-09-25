@@ -32,7 +32,8 @@ from ultralytics.utils import YAML  # noqa: E402
 
 # thứ tự chạy: baseline trước để phát hiện sớm lỗi pipeline, rồi đối chứng, rồi fusion
 ORDER = ["S2_ir", "S1_rgb", "F1_early", "C2_dup_ir", "C1_dup_rgb", "F2a_mid_concat",
-         "C2b_dup_ir_attn", "C1b_dup_rgb_attn", "F2b_mid_attn"]
+         "C2b_dup_ir_attn", "C1b_dup_rgb_attn", "F2b_mid_attn",
+         "C2c_dup_ir_mgate", "C1c_dup_rgb_mgate", "F2c_mid_mgate"]
 
 
 def fold_dataset_yaml(base_yaml: Path, fold: str, out_dir: Path) -> Path:
@@ -52,7 +53,8 @@ def main():
     ap.add_argument("--seeds", nargs="*", type=int, default=[0, 1])
     ap.add_argument("--folds", nargs="*", default=["01", "03", "05"])
     ap.add_argument("--only", nargs="*", default=None, help="loc theo id, vd S1 F2a")
-    ap.add_argument("--skip", nargs="*", default=["F2b", "C1b", "C2b"], help="mac dinh hoan nhanh attn: F2b + doi chung C1b/C2b")
+    ap.add_argument("--skip", nargs="*", default=["F2b", "C1b", "C2b", "C1c"],
+                    help="mac dinh hoan F2b + doi chung C1b/C2b, va C1c (F2c doi chung bang C2c)")
     ap.add_argument("--project", default=None)
     ap.add_argument("--set", nargs="*", default=[], help="ghi de arg Ultralytics")
     ap.add_argument("--no-resume", action="store_true",

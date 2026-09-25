@@ -12,7 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ultralytics.utils import YAML  # noqa: E402
 
-from src.eval.harness import evaluate_strata, load_dump, match_all, run_inference  # noqa: E402
+from src.eval.harness import (evaluate_strata, load_dump, match_all, run_inference,  # noqa: E402
+                              summarize_gate_share)
 from src.eval.stratify import strata_spec  # noqa: E402
 
 
@@ -57,6 +58,19 @@ def main():
                 print(f"    {dim:6s} {g:10s} n={r['n_images']:5d} gt={r['n_gt']:6d} "
                       f"mAP50={r['map50']:.4f}")
     print(f"-> {out}")
+
+    # Chỉ có với cổng ModalityGate (F2c/C1c/C2c): tỉ trọng nhánh B theo tầng chiếu sáng.
+    gates_csv = run_dir / f"gates_{a.split}.csv"
+    if gates_csv.exists():
+        gs = summarize_gate_share(gates_csv, strata)
+        gout = run_dir / f"gates_{a.split}_summary.json"
+        gout.write_text(json.dumps(gs, indent=1, ensure_ascii=False), encoding="utf-8")
+        print("  ti trong nhanh B (IR o F2c; ~0.5 = chia deu):")
+        for dim in ("all", "illum", "illum_decile"):
+            for g, r in sorted(gs.get(dim, {}).items()):
+                lv = "  ".join(f"{k}={v:.3f}" for k, v in r.items() if k != "n_images")
+                print(f"    {dim:12s} {g:10s} n={r['n_images']:5d}  {lv}")
+        print(f"-> {gout}")
 
 
 if __name__ == "__main__":

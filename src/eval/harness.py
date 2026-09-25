@@ -15,6 +15,7 @@ chi tiết pickle và tự nó là một phép kiểm tra rằng config mô tả
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -28,14 +29,22 @@ from ultralytics.utils.ops import xywhr2xyxyxyxy
 from src import patches
 from src.eval import metrics as M
 from src.models.build import build_arch
+from src.models.fusion_ops import ModalityGate
 
 
 class DumpingOBBValidator(OBBValidator):
-    """OBBValidator có ghi lại dự đoán và GT theo từng ảnh (toạ độ gốc)."""
+    """OBBValidator có ghi lại dự đoán và GT theo từng ảnh (toạ độ gốc).
 
-    def __init__(self, *args, **kwargs):
+    Nếu truyền `gates` (các `ModalityGate` đã bật `record`), ghi thêm tỉ trọng
+    của nhánh B ở từng mức hợp nhất cho từng ảnh. Đọc ngay trong `update_metrics`
+    là đúng lúc: forward của batch này vừa chạy xong, `last_share` còn là của nó.
+    """
+
+    def __init__(self, *args, gates=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.dump: dict[str, dict] = {}
+        self.gates = list(gates or [])
+        self.gate_share: dict[str, list[float]] = {}
 
     @staticmethod
     def scale_gt(pbatch: dict) -> dict:
@@ -68,6 +77,8 @@ class DumpingOBBValidator(OBBValidator):
                             if len(gb) else np.zeros((0, 8), np.float32)),
                 "gt_cls": pbatch["cls"].detach().cpu().numpy().astype(np.int32).ravel(),
             }
+            if self.gates:
+                self.gate_share[stem] = [float(g.last_share[si]) for g in self.gates]
 
 
 def rebuild_model(run_dir: str | Path, weights: str | Path | None = None):
@@ -104,16 +115,60 @@ def run_inference(run_dir: str | Path, split: str = "test", imgsz: int = 640,
     patches.apply_all()
     run_dir = Path(run_dir)
     model, exp, data = rebuild_model(run_dir)
+    gates = [m for m in model.modules() if isinstance(m, ModalityGate)]
+    for g in gates:
+        g.record = True
 
     data_yaml = Path(data_override) if data_override else run_dir / "data.yaml"
     args = dict(model=None, data=str(data_yaml), split=split, imgsz=imgsz, batch=batch,
                 device=device, task="obb", mode="val", conf=0.001, iou=0.7, max_det=300,
                 plots=False, save_json=False, verbose=False, rect=False)
-    v = DumpingOBBValidator(args=args)
+    v = DumpingOBBValidator(args=args, gates=gates)
     v(model=model.eval())
 
     out = run_dir / out_name
     save_dump(v.dump, out)
+    if v.gate_share:
+        save_gate_share(v.gate_share, run_dir / out_name.replace("preds_", "gates_")
+                        .replace(".npz", ".csv"))
+    return out
+
+
+def gate_levels(n: int) -> list[str]:
+    """Tên cột cho từng mức hợp nhất. `fused_levels` được sắp tăng dần, nên với
+    YOLO11 (3 mức) thứ tự là P3, P4, P5."""
+    return [f"P{3 + i}" for i in range(n)] if n == 3 else [f"g{i}" for i in range(n)]
+
+
+def save_gate_share(share: dict[str, list[float]], path: str | Path) -> None:
+    """Ghi tỉ trọng nhánh B (IR ở F2c) theo ảnh: id, P3, P4, P5 — giá trị trong [0, 1]."""
+    ids = sorted(share)
+    levels = gate_levels(len(share[ids[0]]))
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["id", *levels])
+        for i in ids:
+            w.writerow([i, *(f"{x:.6f}" for x in share[i])])
+
+
+def summarize_gate_share(path: str | Path, strata: dict) -> dict:
+    """Trung bình tỉ trọng nhánh B theo từng nhóm phân tầng (vd decile chiếu sáng).
+
+    Returns:
+        {dim: {group: {"n_images": int, "P3": mean, "P4": mean, "P5": mean}}}
+    """
+    rows = list(csv.DictReader(open(path, encoding="utf-8")))
+    levels = [k for k in rows[0] if k != "id"] if rows else []
+    by_id = {r["id"]: [float(r[k]) for k in levels] for r in rows}
+    out: dict[str, dict] = {}
+    for dim, groups in strata.items():
+        out[dim] = {}
+        for gname, ids in groups.items():
+            vals = np.array([by_id[i] for i in ids if i in by_id], dtype=np.float64)
+            if not len(vals):
+                continue
+            out[dim][gname] = {"n_images": len(vals),
+                               **{k: float(v) for k, v in zip(levels, vals.mean(0))}}
     return out
 
 

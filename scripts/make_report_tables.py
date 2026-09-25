@@ -23,7 +23,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 
 DATASETS = [("dronevehicle", "DroneVehicle", "test"), ("vedai", "VEDAI", "val")]
-ORDER = ["S1", "S2", "C1", "C2", "C1b", "C2b", "F1", "F2a", "F2b", "F3"]
+ORDER = ["S1", "S2", "C1", "C2", "C1b", "C2b", "C1c", "C2c", "F1", "F2a", "F2b", "F2c", "F3"]
 ROLE = {
     "S1": ("RGB", "1 luong", "baseline"),
     "S2": ("IR", "1 luong", "baseline"),
@@ -31,9 +31,12 @@ ROLE = {
     "C2": ("IR vao ca 2 luong", "2 luong", "**doi chung capacity**"),
     "C1b": ("RGB vao ca 2 luong", "2 luong + attn", "**doi chung capacity (attn)**"),
     "C2b": ("IR vao ca 2 luong", "2 luong + attn", "**doi chung capacity (attn)**"),
+    "C1c": ("RGB vao ca 2 luong", "2 luong + mgate", "**doi chung capacity (mgate)**"),
+    "C2c": ("IR vao ca 2 luong", "2 luong + mgate", "**doi chung capacity (mgate)**"),
     "F1": ("RGB + IR", "1 luong, 4 kenh", "fusion som"),
     "F2a": ("RGB + IR", "2 luong", "fusion giua (concat+1x1)"),
     "F2b": ("RGB + IR", "2 luong + attn", "fusion giua (attention)"),
+    "F2c": ("RGB + IR", "2 luong + mgate", "fusion giua (modality gate)"),
     "F3": ("RGB + IR", "2 x 1 luong", "fusion muon (WBF)"),
 }
 BINS = ["lowlight", "midlight", "bright"]
@@ -135,14 +138,18 @@ def main():
     L += tbl(["ID", "Dau vao", "Kien truc", "Vai tro", "Tham so",
               "n run DV", "n run VEDAI", "Trang thai"], rows)
     L += ["", "> Hai nhom co **so tham so bang nhau tuyet doi** trong noi bo nhom — cung file "
-          "kien truc, chi khac truong `modalities`: **{C1, C2, F2a}** va **{C1b, C2b, F2b}**. "
+          "kien truc, chi khac truong `modalities`: **{C1, C2, F2a}**, **{C1b, C2b, F2b}** va "
+          "**{C1c, C2c, F2c}**. "
           "Day la dieu kien de `F2a - C2` va `F2b - C2b` doc duoc la dong gop cua *thong tin "
           "bo sung*, khong phai cua *dung luong mo hinh*.", "",
           "> Cot *Tham so* lay tu run dau tien tim duoc nen phu thuoc so lop `nc` cua dataset do "
           "(DroneVehicle 5 lop, VEDAI 8 lop) — bat bien duoc canh la *bang nhau trong cung mot "
           "nhom tren cung mot dataset*, xem `scripts/gen_experiment_configs.py`.", "",
           "> Cong attn cua F2b them **198.784 tham so** so voi F2a (khong phu thuoc `nc`), nen "
-          "**`F2b - C2` khong phai so sanh co kiem soat** — doi chung dung cua F2b la C2b.", ""]
+          "**`F2b - C2` khong phai so sanh co kiem soat** — doi chung dung cua F2b la C2b.", "",
+          "> Cong mgate cua F2c co **dung bang so tham so** cong attn cua F2b (cung hinh dang MLP); "
+          "chi khac khoi tao dong nhat, mo ta avg+max va softmax giua hai modality. "
+          "Doi chung dung cua F2c la C2c.", ""]
 
     # ---------- B2 / B3 ----------
     for idx, (ds, disp, split) in enumerate(DATASETS):

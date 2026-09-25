@@ -19,7 +19,7 @@ Bố cục sinh ra (nb = số lớp backbone gốc, với YOLO11 là 11):
     ...                 head gốc             chỉ đổi lại chỉ số tham chiếu
 
 Toán tử hợp nhất `Concat` -> `Conv 1x1` (biến thể F2a) dùng module CÓ SẴN của
-Ultralytics, không cần module tự viết nào. Biến thể F2b (cổng chú ý) thêm một
+Ultralytics, không cần module tự viết nào. Biến thể F2b/F2c (cổng chú ý) thêm một
 module trong src/models/fusion_ops.py.
 """
 
@@ -59,7 +59,7 @@ def build_two_stream_yaml(
         base: YAML gốc của Ultralytics (mọi model dạng backbone/head đều hợp lệ).
         scale: n/s/m/l/x.
         split: số kênh mỗi nhánh, ví dụ (3, 3) cho RGB + IR.
-        fusion: "concat1x1" (F2a) hoặc "attn" (F2b).
+        fusion: "concat1x1" (F2a), "attn" (F2b) hoặc "mgate" (F2c).
         nc: số lớp; None thì giữ của file gốc.
     """
     from ultralytics.utils.checks import check_yaml
@@ -97,9 +97,10 @@ def build_two_stream_yaml(
         layers.append([[a_idx, b_idx], 1, "Concat", [1]])
         if fusion == "concat1x1":
             layers.append([-1, 1, "Conv", [c_out, 1]])
-        elif fusion == "attn":
-            # GatedFusion giữ nguyên số kênh -> cần số kênh ĐÃ scale của tensor sau Concat
-            layers.append([-1, 1, "GatedFusion", [2 * _scaled(c_out, d, scale)]])
+        elif fusion in ("attn", "mgate"):
+            # Cổng giữ nguyên số kênh -> cần số kênh ĐÃ scale của tensor sau Concat
+            gate = "GatedFusion" if fusion == "attn" else "ModalityGate"
+            layers.append([-1, 1, gate, [2 * _scaled(c_out, d, scale)]])
             layers.append([-1, 1, "Conv", [c_out, 1]])
         else:
             raise ValueError(f"fusion khong hop le: {fusion!r}")
